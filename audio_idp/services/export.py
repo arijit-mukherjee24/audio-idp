@@ -2,8 +2,8 @@ import csv
 import io
 
 def export_csv(records):
-    buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer)
+    output_buffer = io.StringIO(newline="")
+    writer = csv.writer(output_buffer)
     writer.writerow(["file", "class", "field", "value", "evidence", "review_note", "error"])
     def safe(value):
         value = str(value or "")
@@ -13,4 +13,4 @@ def export_csv(records):
         for name, value in fields.items():
             writer.writerow([safe(v) for v in [record["name"], record.get("class"), name,
                             value["value"], value["evidence"], value.get("warning"), record.get("error")]])
-    return buffer.getvalue().encode("utf-8-sig")
+    return output_buffer.getvalue().encode("utf-8-sig")

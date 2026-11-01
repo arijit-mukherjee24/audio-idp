@@ -85,19 +85,19 @@ class Store:
         with self.lock:
             if self.resetting:
                 raise ValueError('Workspace reset in progress.')
-            id = id or uuid.uuid4().hex
-            old = self.get(id)
+            entity_id = id or uuid.uuid4().hex
+            old = self.get(entity_id)
             with self.connection() as db:
                 db.execute('''INSERT INTO entities(id,kind,parent,batch,data,updated) VALUES(?,?,?,?,?,?)
                   ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=entities.revision+1,updated=excluded.updated''',
-                           (id, kind, parent, batch, json.dumps(data, ensure_ascii=False), time.time()))
+                           (entity_id, kind, parent, batch, json.dumps(data, ensure_ascii=False), time.time()))
             # Every schema edit also changes the class revision used by active jobs.
             if kind == 'field':
                 owner = parent or (old and old['parent'])
                 with self.connection() as db:
                     db.execute('UPDATE entities SET revision=revision+1 WHERE id=?', (owner,))
                 self.invalidate_class(owner, fields_only=True)
-            return id
+            return entity_id
 
     def invalidate_class(self, class_id, fields_only=False):
         for assignment in self.list('classification'):
