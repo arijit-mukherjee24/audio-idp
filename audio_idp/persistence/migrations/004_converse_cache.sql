@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS request_cache (
+  key TEXT PRIMARY KEY, response TEXT NOT NULL, created REAL NOT NULL, hits INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS request_cache_owners (
+  key TEXT REFERENCES request_cache(key) ON DELETE CASCADE,
+  batch TEXT REFERENCES entities(id) ON DELETE CASCADE,
+  target TEXT NOT NULL,
+  PRIMARY KEY(key,batch,target));
+CREATE TABLE IF NOT EXISTS cache_state (id INTEGER PRIMARY KEY CHECK(id=1), generation INTEGER NOT NULL);
+INSERT OR IGNORE INTO cache_state VALUES(1,0);
+ALTER TABLE jobs ADD COLUMN cache_hit INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE jobs ADD COLUMN request_hash TEXT;
+PRAGMA user_version=4;

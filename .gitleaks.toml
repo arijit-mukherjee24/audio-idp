@@ -1,0 +1,7 @@
+title = "Audio IDP secret scanning"
+
+[extend]
+useDefault = true
+
+# Do not allowlist credential files, runtime folders, or tests here.
+# Publishable-file filtering happens before scanning; history is scanned in full.

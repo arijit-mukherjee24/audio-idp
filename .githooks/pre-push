@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+if [ -x .venv/Scripts/python.exe ]; then
+    exec .venv/Scripts/python.exe scripts/security_check.py --tracked --history
+elif [ -x .venv/bin/python ]; then
+    exec .venv/bin/python scripts/security_check.py --tracked --history
+elif command -v py >/dev/null 2>&1; then
+    exec py -3.13 scripts/security_check.py --tracked --history
+else
+    exec python3 scripts/security_check.py --tracked --history
+fi

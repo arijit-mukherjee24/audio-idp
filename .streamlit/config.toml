@@ -1,0 +1,25 @@
+[theme]
+base = "dark"
+font = "sans-serif"
+
+[theme.light]
+primaryColor = "#356c50"
+backgroundColor = "#f6f8f5"
+secondaryBackgroundColor = "#e9efea"
+textColor = "#192e24"
+
+[theme.dark]
+primaryColor = "#a6d1b4"
+backgroundColor = "#111b17"
+secondaryBackgroundColor = "#1d2c24"
+textColor = "#e5efe8"
+
+[server]
+address = "127.0.0.1"
+maxUploadSize = 50
+
+[client]
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false
