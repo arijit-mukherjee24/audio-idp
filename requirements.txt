@@ -1,5 +1,5 @@
 streamlit>=1.66,<2
 boto3>=1.38,<2
-faster-whisper>=1.2,<2
+faster-whisper>=1.2.1,<2
 av>=14,<17
 numpy>=2,<3
