@@ -32,14 +32,13 @@ archives are SHA-256 verified. It prints finding locations and rules, never secr
 values. Temporary snapshots/reports and scanner binaries stay under ignored
 `.run/`; temporary snapshots/reports are removed after each check.
 
-GitHub Actions repeats the tracked-file check and scans all reachable Git history.
-It uses read-only repository permissions and requires no AWS or application secrets.
+There is no GitHub Actions workflow in this temporary development repository.
+Tests and security checks run locally, including through the enabled Git hooks.
 Run `python scripts/security_check.py --tracked --history` locally to do the same.
 
-Hooks are opt-in per clone and can be bypassed. CI detects mistakes after code has
-already reached GitHub; it cannot prevent an initial disclosure. Repository owners
-should enable GitHub secret scanning and push protection where available, and make
-the security check required in their branch rules. No scanner detects every secret
+Hooks are opt-in per clone and can be bypassed. Repository owners
+should enable GitHub secret scanning and push protection where available.
+No scanner detects every secret
 or every form of personal data; review staged files before every commit.
 
 If a credential was ever committed, revoke/rotate it first. Deleting a file or

@@ -81,7 +81,7 @@ Do not paste its account details or any credentials into public issues.
 
 AWS configuration belongs in your user-level AWS directory, outside this project:
 `%USERPROFILE%/.aws/` on Windows or `~/.aws/` on macOS/Linux. The app does not ask
-for credentials through its UI. No AWS credentials are needed in GitHub Actions.
+for credentials through its UI. Keep them on each developer's own computer.
 
 The role needs `bedrock:InvokeModel` for the configured inference profile and its
 underlying destination-region foundation models. An administrator must also ensure
@@ -221,10 +221,11 @@ policy and checks for literal active environment-secret values. Staged mode insp
 Git's index, not just the current file on disk. Tracked mode also catches force-added
 ignored files. Findings show locations/rule names with values hidden.
 
-GitHub Actions runs the checks on pushes and pull requests using Python 3.13,
-read-only permissions, and no AWS credentials. Gitleaks and GitHub Actions are pinned.
-Enable GitHub secret scanning/push protection where available and require the security
-job in branch rules. Hooks and scanners reduce risk; they cannot guarantee that all
+This temporary development repository has no GitHub Actions workflows or Dependabot
+version-update configuration. Run tests and secret checks locally; the enabled local
+commit/push hooks still protect Git operations without using GitHub-hosted runners.
+Gitleaks is pinned and checksum verified. Enable GitHub secret scanning/push protection
+where available. Hooks and scanners reduce risk; they cannot guarantee that all
 secrets or personal data are detected. See [SECURITY.md](SECURITY.md) and
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -269,9 +270,8 @@ project; the owner should choose one before offering it for third-party reuse.
 ```text
 app.py                      Streamlit entry point
 start.ps1 / stop.ps1         Windows process lifecycle
-scripts/security_check.py   Pre-commit/pre-upload and CI security checks
+scripts/security_check.py   Local pre-commit/pre-upload security checks
 .githooks/                   Opt-in local commit and push guards
-.github/workflows/ci.yml    Secret scan and Python 3.13 tests
 audio_idp/
   domain/                   Definitions and storage contracts
   providers/                Whisper, Bedrock, and response-cache boundaries
