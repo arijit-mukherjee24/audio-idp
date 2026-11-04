@@ -1,4 +1,5 @@
 import streamlit as st
+from html import escape
 from audio_idp.ui.common import action, delete_dialog, name_of
 from audio_idp.services.deletion import reset_workspace
 
@@ -20,6 +21,8 @@ def style():
     .journey-step.current span {background:rgba(91,145,114,.2);border-color:#6eab89}
     .journey-step.done {opacity:.85}
     .brand {font-size:.76rem;letter-spacing:.15em;opacity:.65;margin-bottom:10px}
+    .batch-context {margin:0;font-size:.8rem;line-height:1.4;opacity:.7;overflow-wrap:anywhere}
+    [data-testid="stMarkdownContainer"]:has(> .batch-context) {margin-bottom:0}
     mark {background:rgba(91,145,114,.3);color:inherit;border-radius:2px}
     .class-progress-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:8px 0 24px}
     .class-progress-card {border:1px solid rgba(125,145,134,.3);border-radius:10px;padding:16px;min-width:0}
@@ -58,12 +61,13 @@ def navigation(w):
         st.session_state['view']='Dashboard'
     view=st.session_state.get('view','Dashboard')
     if view in ('Pipeline','Batch jobs'):
-        back,context,actions=st.columns([1.5,3,1])
+        back,context,actions=st.columns([1.5,3,1],vertical_alignment='center')
         with back:
             if st.button('← Back to dashboard',width='stretch'):
                 st.session_state['navigate']={'batch':None,'view':'Dashboard'}
                 st.rerun()
-        context.caption('EDITING BATCH / '+name_of(w.store,batch,'New batch'))
+        title='EDITING BATCH / '+name_of(w.store,batch,'New batch') if batch else 'CREATE NEW BATCH'
+        context.markdown(f'<p class="batch-context">{escape(title)}</p>',unsafe_allow_html=True)
         if batch:
             with actions.popover('Batch actions',width='stretch'):
                 if st.button('Delete this batch',width='stretch'):delete_dialog(w,batch)
