@@ -6,7 +6,7 @@ from pathlib import Path
 from audio_idp.domain.validation import definition
 from audio_idp.providers.bedrock import client
 from audio_idp.config import MODEL
-from audio_idp.services.transcription import transcribe, MAX_BYTES, FORMATS, LANGUAGES
+from audio_idp.services.transcription import transcribe, MAX_BYTES, FORMATS, LANGUAGES, PROVIDERS
 from audio_idp.services.classification import classify
 from audio_idp.services.extraction import extract
 from audio_idp.services.class_suggestion import suggest_classes
@@ -91,19 +91,31 @@ class Workspace:
             return result
 
     @serialized
-    def transcribe_batch(self, batch):
+    def transcribe_batch(self, batch, provider=None):
         s = self.store
+        b = s.get(batch)
+        if not b:
+            raise ValueError('Choose an existing batch.')
+        saved_provider = b['data'].get('transcription_provider', 'whisper')
+        provider = saved_provider if provider is None else provider
+        if provider not in PROVIDERS:
+            raise ValueError('Choose a supported transcription engine.')
+        if provider != saved_provider:
+            if any(j['kind']=='transcribe' and j['status'] in ('queued','running') for j in s.jobs(batch)):
+                raise ValueError('Wait for active transcription jobs before changing the engine.')
+            s.save('batch', dict(b['data'], transcription_provider=provider), id=batch)
         for r in s.list('recording', batch=batch):
             if s.get('tr-' + r['id']):
                 continue
             self.jobs.submit('transcribe', r['id'], batch, [r],
-                lambda r=r: self._transcribe(r),
+                lambda r=r: self._transcribe(r) if provider == 'whisper' else self._transcribe(r, provider),
                 lambda value, r=r: s.save('transcript', value, id='tr-'+r['id'], parent=r['id'], batch=batch))
 
     @staticmethod
-    def _transcribe(recording):
+    def _transcribe(recording, provider='whisper'):
         data = recording['data']
-        result = transcribe(Path(data['path']), LANGUAGES.get(data['language']), speakers=False)
+        options = {} if provider == 'whisper' else {'provider': provider}
+        result = transcribe(Path(data['path']), LANGUAGES.get(data['language']), speakers=False, **options)
         if result['language'] not in LANGUAGES.values():
             raise ValueError('Detected language is outside English, Spanish and French. Change the recording language.')
         return result

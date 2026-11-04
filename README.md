@@ -1,9 +1,9 @@
 # Audio IDP
 
 A local audio-to-structured-data workspace built with Python 3.13, Streamlit,
-SQLite, faster-whisper, and Amazon Bedrock.
+SQLite, local faster-whisper, Amazon Transcribe or Azure Speech, and Amazon Bedrock.
 
-Upload recordings, transcribe locally, automatically suggest and assign a class,
+Upload recordings, transcribe locally or with AWS, automatically suggest and assign a class,
 review shared field definitions, and extract values with supporting quotes.
 The dashboard lists saved batches; each batch has its own pipeline, JSON preview,
 JSON/CSV exports, and processing-job view. Light and dark themes are available.
@@ -14,8 +14,8 @@ JSON/CSV exports, and processing-job view. Light and dark themes are available.
 - **Git** and Internet access for installing dependencies and the initial model download.
 - **Windows PowerShell 5.1 or PowerShell 7** for the included start/stop scripts.
 - **AWS CLI v2** and an AWS account/role allowed to invoke the configured Bedrock model.
-  AWS credentials are only needed for class/field suggestions and extraction, not
-  for local transcription or the offline tests. Bedrock calls can incur charges.
+  AWS credentials are needed for Amazon Transcribe, class/field suggestions, and
+  extraction, not for local Whisper transcription or offline tests. AWS calls can incur charges.
 
 Windows is the supported start/stop-script environment. A manual foreground command
 for macOS/Linux is provided below; those platforms do not use the PowerShell lifecycle scripts.
@@ -124,11 +124,105 @@ blocks a downloaded script, review it and follow your organization's script poli
 for a trusted clone, `Unblock-File .\start.ps1` and `Unblock-File .\stop.ps1` may
 remove the downloaded-file mark. Do not disable machine-wide execution protections.
 
-The first transcription downloads the public Whisper **small** model into `.models/`.
+The first Whisper transcription downloads the public **small** model into `.models/`.
 That download needs Internet access; subsequent transcriptions reuse it locally.
 CPU inference uses int8. Speaker diarization is disabled and needs no Hugging Face token.
 The normal install is `requirements.txt`; `requirements-speakers.txt` is optional
 backend development support and is not needed for this UI.
+
+### Choose a transcription engine
+
+In **Upload & transcribe → Add recordings**, select **Transcription engine**:
+
+- **Whisper (local)** is the default, including for existing batches. It runs on
+  your CPU and reuses the downloaded model.
+- **Amazon Transcribe** uploads validated, mono 16 kHz WAV audio to S3, submits a
+  standard batch transcription job, and retrieves its timestamped transcript.
+  It uses the same user-level AWS `default` profile as Bedrock. No separate
+  data-access role or `iam:PassRole` is used.
+- **Azure Speech** sends validated, mono 16 kHz WAV audio directly to Azure's
+  Fast Transcription API. It returns a timestamped transcript without requiring
+  a Blob Storage account. Configure an Azure Speech resource endpoint and
+  authentication as described below.
+
+Click **Upload & transcribe** to save the choice and process pending recordings.
+The choice is saved per batch. It cannot change while transcription is active;
+completed transcripts are kept and show the engine that produced them.
+
+Amazon Transcribe defaults to bucket `am-sc-test-bucket`, region `us-east-1`.
+Override these non-secret values before starting if needed:
+
+```powershell
+$env:AUDIO_IDP_TRANSCRIBE_BUCKET = 'your-private-bucket'
+$env:AUDIO_IDP_TRANSCRIBE_REGION = 'us-east-1'
+.\start.ps1
+```
+
+The bucket must be in the selected region. The role needs
+`transcribe:StartTranscriptionJob`, `transcribe:GetTranscriptionJob`, and
+`transcribe:DeleteTranscriptionJob` (for retrying failed AWS jobs), along with
+`s3:GetBucketLocation`, `s3:PutObject`, and `s3:GetObject` for the configured bucket
+and `audio-idp/` object prefix. Bucket policies and encryption-key permissions
+must also allow access.
+
+English maps to `en-US`, Spanish to `es-ES`, and French to `fr-FR`. Auto-detection
+selects among those three variants. Speaker labels remain disabled for both engines.
+The existing 50 MB / 10-minute limits apply before an AWS upload.
+
+The AWS path stores WAV inputs under `audio-idp/input/` and transcript JSON under
+`audio-idp/output/`. These objects and AWS job records are retained for recovery.
+Deleting local batches, transcripts, or workspace data does **not** delete cloud
+copies. Configure bucket lifecycle retention separately if required.
+
+Stable names derived from the audio and settings let retries reuse completed AWS
+jobs or reconnect to running jobs, including after an app restart. Retry an
+interrupted stage with **Upload & transcribe**; jobs are not automatically
+resubmitted at startup. A poll timeout after 30 minutes leaves the AWS job intact
+so retry can reconnect. Retrying a failed AWS job recreates it and may incur charges.
+Cancelling a local job discards its local result; it does not stop AWS processing.
+
+See the AWS [batch API](https://docs.aws.amazon.com/transcribe/latest/APIReference/API_StartTranscriptionJob.html)
+and [pricing](https://aws.amazon.com/transcribe/pricing/) for service details and costs.
+
+### Azure Speech setup
+
+Use a Speech resource in a region that supports Fast Transcription. Copy its
+HTTPS base endpoint from the Azure portal; do not include an API path or query.
+Set the following in the PowerShell session used to start the app:
+
+```powershell
+$env:AZURE_SPEECH_ENDPOINT = 'https://your-speech-resource.cognitiveservices.azure.com'
+$env:AZURE_SPEECH_AUTH = 'key'
+$env:AZURE_SPEECH_KEY = [System.Net.NetworkCredential]::new('', (Read-Host 'Azure Speech key' -AsSecureString)).Password
+.\start.ps1
+```
+
+If the app is already running, stop it first so its replacement inherits the
+updated environment. Keep the key in your local environment, never in source,
+batch metadata, chat, or `.env.example`. The app does not load `.env` files.
+
+Optional Microsoft Entra authentication uses `AZURE_SPEECH_AUTH=entra` instead of
+a key. It requires the optional `requirements-azure.txt` dependencies, a custom
+resource subdomain, and an identity with the **Cognitive Services Speech User**
+role at the Speech resource scope. Authentication uses `DefaultAzureCredential`,
+which supports configured application identities or an existing Azure CLI login.
+No interactive login is started by the app.
+
+Select **Azure Speech** under **Transcription engine**, then click **Upload &
+transcribe**. English, Spanish, and French map to `en-US`, `es-ES`, and `fr-FR`;
+auto-detection uses those candidates. Local file-size and duration limits still
+apply. Credentials are checked only when Azure is selected, so the other engines
+do not need Azure setup.
+
+This path uses the synchronous `2025-10-15` Fast Transcription API. It does not
+create Azure Blob objects or resumable batch jobs. Completed transcripts are
+stored locally. A request interrupted by timeout or app restart cannot be
+reattached; retrying may incur another transcription charge. Requests are not
+automatically retried. Speaker labels remain disabled.
+
+See Microsoft's [Fast Transcription guide](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/fast-transcription-create)
+and [Speech permissions](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control)
+for region availability and resource authentication requirements.
 
 ### Optional application settings
 
@@ -196,7 +290,11 @@ the live store; snapshots are atomically replaced. Snapshots contain transcripts
 class/field definitions, assignments, results, job metadata, and local file references.
 Exports and logs can contain private data even when they contain no API keys.
 
-Converse receives transcript text and class/field definitions, not raw audio.
+Bedrock Converse receives transcript text and class/field definitions, not raw audio.
+Selecting Amazon Transcribe also uploads normalized audio to your configured S3
+bucket for cloud transcription; Whisper keeps transcription local.
+Selecting Azure Speech sends normalized audio directly to the configured Azure
+Speech endpoint. It does not use the AWS bucket or create an Azure storage container.
 Validated successful AI responses are cached locally using SHA-256 over the complete
 request: transcript, prompts, definitions, model, region, and inference settings.
 Identical requests reuse responses across restarts; explicit suggestion refresh bypasses
@@ -261,6 +359,7 @@ project; the owner should choose one before offering it for third-party reuse.
 | `ExpiredTokenException` | Refresh SSO/temporary credentials and retry the file or class job. |
 | `AccessDeniedException` | Ask your AWS administrator to verify model access, inference-profile permissions, and destination-region/SCP restrictions. |
 | Model is unavailable | Allow the initial public model download and retry transcription. |
+| Amazon Transcribe fails | Check the AWS default profile, Transcribe and S3 permissions, and matching bucket/service regions. Retry reconnects to an existing AWS job when possible. |
 | Port 8501 is occupied | Stop this app with `stop.ps1`, stop a manually launched instance with Ctrl+C, or choose another port. |
 | JSON snapshot needs attention | Check local disk access/free space and use the dashboard retry control; SQLite data is preserved. |
 | Security hook cannot run | Use Python 3.13, run `scripts/security_check.py --install`, and enable `.githooks` in this clone. |

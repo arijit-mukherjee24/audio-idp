@@ -1,8 +1,19 @@
 from pathlib import Path
+import io
+import wave
 import av
 import numpy as np
 MAX_BYTES=50*1024*1024
 MAX_SECONDS=600
+
+
+def encode_wave(audio):
+    """Encode validated float samples as mono 16 kHz PCM for cloud services."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as output:
+        output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        output.writeframes((audio.clip(-1, 1) * 32767).astype('<i2').tobytes())
+    return buffer.getvalue()
 
 def decode_audio(path):
     # Decode once with a hard duration limit, including files with misleading headers.

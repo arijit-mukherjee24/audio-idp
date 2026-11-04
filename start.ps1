@@ -55,7 +55,7 @@ try {
     }
 
     # Read distribution metadata without loading models or contacting AWS.
-    & $python -c "import importlib.metadata as m, sys; names={d.metadata['Name'].lower() for d in m.distributions()}; sys.exit(not all(n in names for n in ('streamlit', 'boto3', 'faster-whisper', 'av', 'numpy')))"
+    & $python -c "import importlib.metadata as m, sys; names={d.metadata['Name'].lower() for d in m.distributions()}; sys.exit(not all(n in names for n in ('streamlit', 'boto3', 'faster-whisper', 'av', 'numpy', 'requests')))"
     $dependenciesMissing = $LASTEXITCODE -ne 0
     if ($createdEnvironment -or $dependenciesMissing -or $InstallDependencies) {
         Write-Host 'Installing application dependencies...'

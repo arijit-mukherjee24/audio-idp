@@ -9,6 +9,9 @@ def safe_error(exc):
         code = exc.response.get('Error', {}).get('Code', 'ClientError')
         if code in ('ExpiredTokenException','ExpiredToken','UnrecognizedClientException','InvalidClientTokenId'):
             return f'{code}: AWS credentials are expired or invalid. Refresh your local default profile and retry.'
+        if getattr(exc, 'operation_name', '') in ('StartTranscriptionJob','GetTranscriptionJob','DeleteTranscriptionJob',
+                                                   'GetBucketLocation','PutObject','GetObject'):
+            return f'{code}: verify Amazon Transcribe and S3 permissions, bucket region, and request limits, then retry.'
         return f'{code}: verify Bedrock model access, permissions, region and request limits, then retry.'
     if isinstance(exc, ValueError):
         return str(exc)[:500]

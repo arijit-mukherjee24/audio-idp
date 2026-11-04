@@ -1,0 +1,4 @@
+# Optional keyless Microsoft Entra authentication for Azure Speech.
+# API-key authentication only needs the normal requirements.txt installation.
+-r requirements.txt
+azure-identity>=1.19,<2

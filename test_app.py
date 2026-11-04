@@ -48,6 +48,28 @@ class AppWorkflowTest(unittest.TestCase):
         next(r for r in app.radio if r.label=='Files').set_value(id).run()
         self.assertFalse(app.exception,str(app.exception))
 
+    def test_amazon_engine_selection_persists_without_replacing_completed_transcripts(self):
+        app=self.app(0)
+        engine=next(s for s in app.selectbox if s.label=='Transcription engine')
+        self.assertEqual(engine.value,'whisper')
+        engine.set_value('amazon').run()
+        next(b for b in app.button if b.label=='Upload & transcribe').click().run()
+        self.assertFalse(app.exception,str(app.exception))
+        self.assertEqual(self.w.store.get(self.batch)['data']['transcription_provider'],'amazon')
+        self.assertEqual(len(self.w.transcripts(self.batch)),2)
+        self.assertTrue(any('Uploads audio to AWS S3' in c.value for c in app.caption))
+        self.choose(app,self.ids[1])
+        self.assertEqual(next(s for s in app.selectbox if s.label=='Transcription engine').value,'amazon')
+
+    def test_azure_engine_selection_is_saved_and_shows_cloud_notice(self):
+        app=self.app(0)
+        next(s for s in app.selectbox if s.label=='Transcription engine').set_value('azure').run()
+        next(b for b in app.button if b.label=='Upload & transcribe').click().run()
+        self.assertFalse(app.exception,str(app.exception))
+        self.assertEqual(self.w.store.get(self.batch)['data']['transcription_provider'],'azure')
+        self.assertEqual(len(self.w.transcripts(self.batch)),2)
+        self.assertTrue(any('Sends audio directly to Azure Speech' in c.value for c in app.caption))
+
     def test_upload_defaults_first_and_displays_only_selected_transcript(self):
         app=self.app(0)
         self.assertEqual(next(r for r in app.radio if r.label=='Files').value,self.ids[0])

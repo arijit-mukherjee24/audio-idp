@@ -1,7 +1,7 @@
 """Four list/detail screens. Parallel work continues independently of selection."""
 import hashlib
 import streamlit as st
-from audio_idp.services.transcription import LANGUAGES, FORMATS, MAX_BYTES
+from audio_idp.services.transcription import LANGUAGES, FORMATS, MAX_BYTES, PROVIDERS
 from audio_idp.services.review import candidates
 from audio_idp.ui.item_browser import select_file, select_item
 from audio_idp.ui.common import delete_button, name_of
@@ -37,6 +37,7 @@ def transcript(w,recording,editable=False):
         st.info('The transcript will appear here when this file finishes processing.')
         return
     st.caption('TRANSCRIPT'+(' · Edited' if t['data'].get('edited') else ''))
+    st.caption('Transcribed with '+PROVIDERS.get(t['data'].get('provider','whisper'), 'Whisper (local)'))
     if editable:
         with st.form('transcript-'+t['id']+'-'+str(t['revision'])):
             text=st.text_area('Transcript text',t['data']['text'],height=370,label_visibility='collapsed')
@@ -60,6 +61,16 @@ def intake(w,batch):
         if files:
             for f in files:st.caption(f.name+' · Received, ready to save')
         active=bool(batch and busy(w,batch,{'transcribe','suggest class'}))
+        b=w.store.get(batch) if batch else None
+        saved_provider=b['data'].get('transcription_provider','whisper') if b else 'whisper'
+        provider=st.selectbox('Transcription engine',list(PROVIDERS),format_func=PROVIDERS.get,
+                              index=list(PROVIDERS).index(saved_provider),key='engine-'+str(batch),disabled=active)
+        if provider=='amazon':
+            st.caption('Uploads audio to AWS S3. Transcription charges apply. Cloud audio and transcripts are retained; deleting local data does not remove them.')
+        elif provider=='azure':
+            st.caption('Sends audio directly to Azure Speech for transcription. Azure usage charges apply. Results are saved in this workspace.')
+        else:st.caption('Transcribes locally using Whisper. The model is downloaded once.')
+        if existing:st.caption('Completed transcripts are kept. The selected engine applies to pending or retried recordings.')
         if st.button('Upload & transcribe',type='primary',width='stretch',disabled=(not files and not existing) or active):
             def start():
                 content=[(f.name,f.getvalue()) for f in files]
@@ -78,7 +89,7 @@ def intake(w,batch):
                 b=w.store.get(id)
                 w.store.save('batch',dict(b['data'],name=name.strip(),guided_stage=0,flow_version=3),id=id)
                 st.session_state['navigate']={'batch':id,'view':'Pipeline'}
-                w.transcribe_batch(id)
+                w.transcribe_batch(id,provider=provider)
             call(start)
 
 def upload(w,batch):
