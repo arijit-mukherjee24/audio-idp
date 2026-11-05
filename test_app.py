@@ -1,5 +1,6 @@
 """List/detail UI tests: selection, isolation and approval transitions."""
 import tempfile
+import os
 import unittest
 from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
@@ -62,13 +63,17 @@ class AppWorkflowTest(unittest.TestCase):
         self.assertEqual(next(s for s in app.selectbox if s.label=='Transcription engine').value,'amazon')
 
     def test_azure_engine_selection_is_saved_and_shows_cloud_notice(self):
-        app=self.app(0)
-        next(s for s in app.selectbox if s.label=='Transcription engine').set_value('azure').run()
-        next(b for b in app.button if b.label=='Upload & transcribe').click().run()
+        with patch.dict(os.environ,{'AZURE_SPEECH_MODE':'fast'}):
+            app=self.app(0)
+            next(s for s in app.selectbox if s.label=='Transcription engine').set_value('azure').run()
+            language=next(s for s in app.selectbox if s.label=='Audio language')
+            self.assertEqual(language.options,['Auto-detect','English','Spanish','French'])
+            self.assertTrue(any('10 minutes each' in c.value for c in app.caption))
+            next(b for b in app.button if b.label=='Upload & transcribe').click().run()
         self.assertFalse(app.exception,str(app.exception))
         self.assertEqual(self.w.store.get(self.batch)['data']['transcription_provider'],'azure')
         self.assertEqual(len(self.w.transcripts(self.batch)),2)
-        self.assertTrue(any('Sends audio directly to Azure Speech' in c.value for c in app.caption))
+        self.assertTrue(any('Sends audio directly to Azure Speech Fast Transcription (Standard S0)' in c.value for c in app.caption))
 
     def test_upload_defaults_first_and_displays_only_selected_transcript(self):
         app=self.app(0)
@@ -167,6 +172,30 @@ class AppWorkflowTest(unittest.TestCase):
         a=self.w.store.get('cl-'+self.ids[0])
         self.assertEqual(self.w.store.get(a['data']['class_id'])['data']['name'],'New category')
 
+    def test_azure_job_history_shows_provider_http_details_and_legacy_notice(self):
+        import json
+        import time
+        transcript=self.w.store.get('tr-'+self.ids[0])
+        self.w.store.save('transcript',dict(transcript['data'],provider='azure'),id=transcript['id'])
+        execution={'http_status':200,'request_id':'synthetic-request-123','api_version':'2025-10-15'}
+        with self.w.store.connection() as db:
+            db.execute('INSERT INTO jobs(id,kind,target,batch,status,created,updated,provider,execution) VALUES(?,?,?,?,?,?,?,?,?)',
+                ('azure-job','transcribe',self.ids[0],self.batch,'completed',1,time.time(),'azure',json.dumps(execution)))
+            db.execute('INSERT INTO jobs(id,kind,target,batch,status,created,updated) VALUES(?,?,?,?,?,?,?)',
+                ('legacy-job','transcribe',self.ids[0],self.batch,'completed',0,0))
+        app=self.app(0)
+        next(r for r in app.radio if r.label=='Workspace').set_value('Batch jobs').run()
+        self.assertFalse(app.exception,str(app.exception))
+        rows=app.dataframe[0].value
+        azure=rows.loc[rows['Response source']=='Azure API · HTTP 200'].iloc[0]
+        self.assertEqual(azure['Provider'],'Azure Speech Fast')
+        self.assertEqual(json.loads(app.json[0].value),execution)
+        next(s for s in app.selectbox if s.label=='Select job on this page').set_value('legacy-job').run()
+        self.assertFalse(app.exception,str(app.exception))
+        self.assertFalse(app.json)
+        self.assertTrue(any('predates per-job provider tracking' in i.value for i in app.info))
+        self.assertTrue(any('Current saved transcript provider: Azure Speech Fast' in c.value for c in app.caption))
+
     def test_batch_job_history_is_paginated_and_scoped_to_opened_batch(self):
         import time
         with self.w.store.connection() as db:
@@ -186,6 +215,9 @@ class AppWorkflowTest(unittest.TestCase):
         next(n for n in app.number_input if n.label=='Job page').set_value(5).run()
         self.assertFalse(app.exception,str(app.exception))
         self.assertEqual(len(app.dataframe[0].value),25)
+        self.assertIn('Provider',app.dataframe[0].value.columns)
+        self.assertIn('Response source',app.dataframe[0].value.columns)
+        self.assertNotIn('AI response',app.dataframe[0].value.columns)
         self.assertTrue(any('125 jobs · Page 5 of 5' in c.value for c in app.caption))
 
         self.assertNotIn('unrelated',app.dataframe[0].value.to_json())

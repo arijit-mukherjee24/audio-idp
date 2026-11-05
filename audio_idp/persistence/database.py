@@ -20,7 +20,7 @@ class Store:
         self.on_change = None
         with self.connection() as db:
             version = db.execute('PRAGMA user_version').fetchone()[0]
-            if version > 4:
+            if version > 5:
                 raise ValueError('Workspace was created by a newer application version.')
             if version == 0:
                 schema = Path(__file__).with_name('migrations') / '001_initial.sql'
@@ -36,6 +36,10 @@ class Store:
                 version=3
             if version==3:
                 schema=Path(__file__).with_name('migrations') / '004_converse_cache.sql'
+                db.executescript(schema.read_text(encoding='utf-8'))
+                version=4
+            if version==4:
+                schema=Path(__file__).with_name('migrations') / '005_job_execution.sql'
                 db.executescript(schema.read_text(encoding='utf-8'))
             db.execute('PRAGMA journal_mode=WAL')
             db.execute("UPDATE jobs SET status='interrupted',error='Application restarted. Retry this stage.' WHERE status IN ('queued','running')")
@@ -180,7 +184,12 @@ class Store:
             sql+=' ORDER BY created DESC'
             if limit is not None:
                 sql+=' LIMIT ? OFFSET ?';args.extend([int(limit),int(offset)])
-            return [dict(r) for r in db.execute(sql,args)]
+            rows=[dict(r) for r in db.execute(sql,args)]
+            for row in rows:
+                try:row['execution']=json.loads(row['execution'])
+                except (ValueError,TypeError):row['execution']={}
+                if not isinstance(row['execution'],dict):row['execution']={}
+            return rows
 
     def job_status(self, id, status, error=''):
         with self.connection() as db:

@@ -22,10 +22,11 @@ DOCUMENT = {'durationMilliseconds': 1000, 'phrases': [
 class AzureSpeechTests(unittest.TestCase):
     def setUp(self):
         self.environment = patch.dict(os.environ, {'AZURE_SPEECH_ENDPOINT': 'https://example.cognitiveservices.azure.com/',
-                                                   'AZURE_SPEECH_KEY': 'synthetic-test-value', 'AZURE_SPEECH_AUTH': 'key'})
+                                                   'AZURE_SPEECH_KEY': 'synthetic-test-value', 'AZURE_SPEECH_AUTH': 'key', 'AZURE_SPEECH_MODE':'fast'})
         self.environment.start()
         self.addCleanup(self.environment.stop)
         self.response = Mock(status_code=200)
+        self.response.headers={'apim-request-id':'synthetic-azure-request-123'}
         self.response.json.return_value = DOCUMENT
         self.response.__enter__ = Mock(return_value=self.response)
         self.response.__exit__ = Mock(return_value=False)
@@ -47,6 +48,10 @@ class AzureSpeechTests(unittest.TestCase):
             self.assertEqual((audio.getnchannels(), audio.getframerate(), audio.getnframes()), (1, 16000, 16000))
         self.assertEqual(metadata['provider'], 'azure')
         self.assertEqual(metadata['language_code'], 'en-US')
+        self.assertEqual(metadata['azure_http_status'],200)
+        self.assertEqual(metadata['azure_request_id'],'synthetic-azure-request-123')
+        self.assertIn('+00:00',metadata['azure_request_sent_at'])
+        self.assertNotIn('Ocp-Apim-Subscription-Key',metadata)
         self.assertEqual(document, DOCUMENT)
 
     def test_auto_detection_restricts_locales_to_supported_app_languages(self):
@@ -123,6 +128,12 @@ class AzureSpeechTests(unittest.TestCase):
             with self.assertRaisesRegex(azure.AzureTranscriptionError, 'must be key or entra'):
                 azure.transcribe_audio(self.audio, 'en')
         self.post.assert_not_called()
+
+    def test_missing_request_id_is_not_fabricated(self):
+        self.response.headers={}
+        _,metadata=azure.transcribe_audio(self.audio,'en')
+        self.assertEqual(metadata['azure_http_status'],200)
+        self.assertNotIn('azure_request_id',metadata)
 
 
 if __name__ == '__main__':

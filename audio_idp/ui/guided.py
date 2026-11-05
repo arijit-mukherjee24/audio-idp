@@ -56,8 +56,6 @@ def intake(w,batch):
     with st.expander('Add recordings',expanded=not existing):
         name=st.text_input('Batch name',name_of(w.store,batch,'New recordings') if batch else 'New recordings')
         files=st.file_uploader('Upload audio files',type=FORMATS,accept_multiple_files=True,key='intake-'+str(batch))
-        language=st.selectbox('Audio language',['Auto-detect']+list(LANGUAGES))
-        st.caption('10 recordings per batch · 50 MB and 10 minutes each')
         if files:
             for f in files:st.caption(f.name+' · Received, ready to save')
         active=bool(batch and busy(w,batch,{'transcribe','suggest class'}))
@@ -65,10 +63,12 @@ def intake(w,batch):
         saved_provider=b['data'].get('transcription_provider','whisper') if b else 'whisper'
         provider=st.selectbox('Transcription engine',list(PROVIDERS),format_func=PROVIDERS.get,
                               index=list(PROVIDERS).index(saved_provider),key='engine-'+str(batch),disabled=active)
+        language=st.selectbox('Audio language',['Auto-detect']+list(LANGUAGES))
+        st.caption('10 recordings per batch · 50 MB and 10 minutes each')
         if provider=='amazon':
             st.caption('Uploads audio to AWS S3. Transcription charges apply. Cloud audio and transcripts are retained; deleting local data does not remove them.')
         elif provider=='azure':
-            st.caption('Sends audio directly to Azure Speech for transcription. Azure usage charges apply. Results are saved in this workspace.')
+            st.caption('Sends audio directly to Azure Speech Fast Transcription (Standard S0). Azure usage charges apply. Results are saved in this workspace.')
         else:st.caption('Transcribes locally using Whisper. The model is downloaded once.')
         if existing:st.caption('Completed transcripts are kept. The selected engine applies to pending or retried recordings.')
         if st.button('Upload & transcribe',type='primary',width='stretch',disabled=(not files and not existing) or active):

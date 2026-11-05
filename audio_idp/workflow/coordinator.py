@@ -109,7 +109,7 @@ class Workspace:
                 continue
             self.jobs.submit('transcribe', r['id'], batch, [r],
                 lambda r=r: self._transcribe(r) if provider == 'whisper' else self._transcribe(r, provider),
-                lambda value, r=r: s.save('transcript', value, id='tr-'+r['id'], parent=r['id'], batch=batch))
+                lambda value, r=r: s.save('transcript', value, id='tr-'+r['id'], parent=r['id'], batch=batch),provider=provider)
 
     @staticmethod
     def _transcribe(recording, provider='whisper'):

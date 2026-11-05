@@ -22,5 +22,7 @@ class Job(TypedDict):
     error: str
     cache_hit: int
     request_hash: str | None
+    provider: str | None
+    execution: dict[str, Any]
     created: float
     updated: float

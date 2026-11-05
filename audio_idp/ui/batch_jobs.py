@@ -3,6 +3,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import streamlit as st
 from audio_idp.ui.common import action, name_of
+from audio_idp.services.job_execution import provider_name,response_source
 
 
 @st.fragment(run_every=2)
@@ -12,6 +13,7 @@ def render(w,batch):
         return
     st.title('Batch jobs')
     st.caption(name_of(w.store,batch)+' · Processing history for this batch')
+    st.caption('Cloud transcription runs on the Python server; Azure calls do not appear directly in browser Network tools. Cached/Fresh refers to Bedrock responses.')
     if st.button('← Back to batch'):
         st.session_state['navigate']={'batch':batch,'view':'Pipeline'}
         st.rerun()
@@ -36,7 +38,8 @@ def render(w,batch):
     for job in current:
         rows.append({'Item':name_of(w.store,job['target'],'Batch operation'),
                      'Operation':job['kind'].title(),'Status':job['status'].title(),
-                     'AI response':('Cached' if job.get('cache_hit') else 'Fresh') if job.get('request_hash') else '—',
+                     'Provider':provider_name(job.get('provider') or ('bedrock' if job.get('request_hash') else None)),
+                     'Response source':response_source(job),
                      'Updated (Asia/Kolkata)':datetime.fromtimestamp(job['updated'],ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%d %H:%M:%S'),
                      'Details':job['error']})
     st.dataframe(rows,hide_index=True,width='stretch')
@@ -48,6 +51,14 @@ def render(w,batch):
             format_func=lambda id:by_id[id]['kind'].title()+' · '+name_of(w.store,by_id[id]['target'],'Batch operation')+' · '+id[:8])
         job=by_id[selected]
         st.write(job['kind'].title()+' · '+job['status'])
+        st.write('Provider: '+provider_name(job.get('provider') or ('bedrock' if job.get('request_hash') else None)))
+        if job.get('execution'):st.json(job['execution'],expanded=True)
+        if job['kind']=='transcribe':
+            transcript=w.store.get('tr-'+job['target'])
+            if transcript:
+                st.caption('Current saved transcript provider: '+provider_name(transcript['data'].get('provider')))
+                if not job.get('provider'):
+                    st.info('This older job predates per-job provider tracking. The current saved transcript is shown for reference; its provider is not inferred for historical jobs.')
         if job['error']:st.warning(job['error'])
         if job['status'] in ('queued','running'):
             action('Cancel job',lambda:w.store.job_status(job['id'],'cancelled'),key='cancel-'+job['id'])

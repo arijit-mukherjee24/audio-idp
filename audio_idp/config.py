@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
+from audio_idp.environment import load_environment
 
 ROOT = Path(__file__).resolve().parents[1]
+load_environment(ROOT / '.env')
 DATA = Path(os.environ.get('AUDIO_IDP_DATA', ROOT / '.data'))
 MODEL_CACHE = ROOT / '.models'
 MODEL = 'us.anthropic.claude-sonnet-4-6'

@@ -1,0 +1,3 @@
+ALTER TABLE jobs ADD COLUMN provider TEXT;
+ALTER TABLE jobs ADD COLUMN execution TEXT NOT NULL DEFAULT '{}';
+PRAGMA user_version=5;

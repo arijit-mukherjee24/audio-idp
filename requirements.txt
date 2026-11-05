@@ -4,3 +4,4 @@ faster-whisper>=1.2,<2
 av>=14,<17
 numpy>=2,<3
 requests>=2.32,<3
+python-dotenv>=1.0,<2

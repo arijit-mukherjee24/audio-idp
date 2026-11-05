@@ -1,6 +1,8 @@
-"""Direct file upload to Azure Speech Fast Transcription (no Blob Storage)."""
+"""Direct file upload to Azure Speech Fast Transcription (Standard S0)."""
 import json
 import os
+from collections.abc import Mapping
+from datetime import datetime,timezone
 from urllib.parse import urlsplit
 
 import requests
@@ -49,11 +51,15 @@ def auth_headers():
 
 
 def transcribe_audio(audio, language):
+    mode=os.environ.get('AZURE_SPEECH_MODE','fast').strip().lower()
+    if mode!='fast':
+        raise AzureTranscriptionError('Only Azure Fast Transcription is supported. Set AZURE_SPEECH_MODE=fast and use a Standard S0 Speech resource.')
     base = endpoint()
     if language is not None and language not in LANGUAGE_CODES:
         raise AzureTranscriptionError('Choose English, Spanish, French, or automatic language detection.')
     definition = {'locales': [LANGUAGE_CODES[language]] if language else list(LANGUAGE_CODES.values()),
                   'diarization': {'enabled': False}, 'profanityFilterMode': 'None'}
+    request_sent_at=datetime.now(timezone.utc).isoformat()
     try:
         # Do not retry POST automatically: a repeated request can be billed again.
         response = requests.post(base + '/speechtotext/transcriptions:transcribe',
@@ -78,6 +84,8 @@ def transcribe_audio(audio, language):
             document = response.json()
         except ValueError:
             raise AzureTranscriptionError('Azure Speech returned an invalid JSON response. Retry the recording.') from None
+        response_headers=response.headers if isinstance(response.headers,Mapping) else {}
+        request_id=next((response_headers.get(name) for name in ('apim-request-id','x-ms-request-id','x-request-id') if response_headers.get(name)),None)
     phrases = document.get('phrases') if isinstance(document, dict) else None
     if not isinstance(phrases, list):
         raise AzureTranscriptionError('Azure Speech returned a transcript without timestamped phrases.')
@@ -89,8 +97,10 @@ def transcribe_audio(audio, language):
         if locale:
             durations[locale] = durations.get(locale, 0) + phrase.get('durationMilliseconds', 0)
     locale = max(durations, key=durations.get) if durations else LANGUAGE_CODES.get(language)
-    return document, {'provider': 'azure', 'language_code': locale,
-                      'azure_endpoint': base, 'azure_api_version': API_VERSION}
+    metadata={'provider': 'azure', 'language_code': locale,'azure_endpoint': base,
+              'azure_api_version': API_VERSION,'azure_http_status':200,'azure_request_sent_at':request_sent_at}
+    if isinstance(request_id,str) and len(request_id)<=256:metadata['azure_request_id']=request_id
+    return document, metadata
 
 
 def words_from_result(document):

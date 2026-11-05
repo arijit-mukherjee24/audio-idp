@@ -14,8 +14,9 @@ authentication, authorization, transport security, and a deployment review.
   are sent to the configured Amazon Bedrock endpoint for AI operations. Bedrock
   usage can incur charges. Local JSON exports and response caches contain derived
   user data and must be handled like the original recordings.
-- `.env.example` contains only non-secret application settings. The app does not
-  automatically load `.env` files.
+- `.env.example` contains non-secret examples and empty credential fields. The app
+  loads the root `.env` locally at startup without replacing existing shell variables.
+  Keep real values only in ignored `.env` or the local environment. Restart after edits.
 
 ## Repository checks
 

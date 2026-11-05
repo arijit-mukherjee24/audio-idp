@@ -1,8 +1,10 @@
 import time
 import uuid
+import json
 from concurrent.futures import ThreadPoolExecutor
 from audio_idp.config import TRANSCRIPTION_WORKERS
 from audio_idp.providers.response_cache import ResponseCache, cache_scope
+from audio_idp.services.job_execution import BEDROCK_OPERATIONS,execution_metadata
 
 def safe_error(exc):
     if hasattr(exc, 'response'):
@@ -33,7 +35,7 @@ class JobManager:
         self.futures = set()
         self.on_complete = None
 
-    def submit(self, kind, target, batch, dependencies, work, commit, guard=lambda: True, refresh=False, cache_owners=()):
+    def submit(self, kind, target, batch, dependencies, work, commit, guard=lambda: True, refresh=False, cache_owners=(),provider=None):
         s = self.store
         with s.lock:
             if s.resetting:
@@ -43,8 +45,8 @@ class JobManager:
             id = uuid.uuid4().hex
             with s.connection() as db:
                 db.execute("UPDATE jobs SET status='superseded' WHERE kind=? AND target=? AND status IN ('failed','interrupted')", (kind,target))
-                db.execute('INSERT INTO jobs(id,kind,target,batch,status,created,updated) VALUES(?,?,?,?,?,?,?)',
-                           (id,kind,target,batch,'queued',time.time(),time.time()))
+                db.execute('INSERT INTO jobs(id,kind,target,batch,status,created,updated,provider) VALUES(?,?,?,?,?,?,?,?)',
+                           (id,kind,target,batch,'queued',time.time(),time.time(),provider or ('bedrock' if kind in BEDROCK_OPERATIONS else None)))
             deps = [(d['id'], d['revision']) for d in dependencies]
             owners={(batch,target),*cache_owners}
             for d in dependencies:
@@ -78,9 +80,13 @@ class JobManager:
                             if assignment and assignment['data'].get('class_id'):
                                 context.owners.add((batch,assignment['data']['class_id']))
                             context.commit()
+                            actual_provider=value.get('provider') if kind=='transcribe' and isinstance(value,dict) else None
+                            if actual_provider not in ('azure','amazon','whisper'):actual_provider=None
+                            if kind in BEDROCK_OPERATIONS:actual_provider='bedrock' if context.keys else 'local'
                             with s.connection() as db:
-                                db.execute('UPDATE jobs SET cache_hit=?,request_hash=? WHERE id=?',
-                                           (int(context.hits>0),context.keys[-1] if context.keys else None,id))
+                                db.execute('UPDATE jobs SET cache_hit=?,request_hash=?,execution=?,provider=coalesce(?,provider) WHERE id=?',
+                                           (int(context.hits>0),context.keys[-1] if context.keys else None,
+                                            json.dumps(execution_metadata(kind,value)),actual_provider,id))
                             s.job_status(id, 'completed')
                         else:
                             cancel_stale()

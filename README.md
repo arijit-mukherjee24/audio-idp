@@ -141,8 +141,8 @@ In **Upload & transcribe → Add recordings**, select **Transcription engine**:
   It uses the same user-level AWS `default` profile as Bedrock. No separate
   data-access role or `iam:PassRole` is used.
 - **Azure Speech** sends validated, mono 16 kHz WAV audio directly to Azure's
-  Fast Transcription API. It returns a timestamped transcript without requiring
-  a Blob Storage account. Configure an Azure Speech resource endpoint and
+  Fast Transcription API (Standard S0). It returns a
+  timestamped transcript without requiring a Blob Storage account. Configure the resource and
   authentication as described below.
 
 Click **Upload & transcribe** to save the choice and process pending recordings.
@@ -186,20 +186,41 @@ and [pricing](https://aws.amazon.com/transcribe/pricing/) for service details an
 
 ### Azure Speech setup
 
-Use a Speech resource in a region that supports Fast Transcription. Copy its
-HTTPS base endpoint from the Azure portal; do not include an API path or query.
-Set the following in the PowerShell session used to start the app:
+The app loads the root `.env` automatically. Copy `.env.example` to `.env` if it
+does not exist, then edit only `.env` with your resource's local credentials.
+Existing shell environment variables take precedence; restart the app after edits.
+
+Use a **Standard S0** Speech resource in a region supporting Fast Transcription.
+Free F0 resources do not support this API. Change the resource's pricing tier to
+S0 in Azure portal, or create an S0 resource. This is a paid usage-based service;
+the app does not change your Azure resource or pricing tier automatically.
+
+Configure these values in the ignored root `.env`:
+
+```dotenv
+AZURE_SPEECH_MODE=fast
+AZURE_SPEECH_AUTH=key
+AZURE_SPEECH_KEY=
+AZURE_SPEECH_ENDPOINT=https://your-speech-resource.cognitiveservices.azure.com
+```
+
+Set the key (Key 1 or Key 2) and actual resource base endpoint from **Keys and Endpoint**
+in Azure portal. Do not include an API path or query string. No separate region
+variable is required: the endpoint determines the Azure resource/region.
+Fast mode supports the app's normal 10-minute limit and automatic language detection.
+It uses API version `2025-10-15` and can incur transcription charges.
+
+Start/restart from PowerShell after saving `.env`:
 
 ```powershell
-$env:AZURE_SPEECH_ENDPOINT = 'https://your-speech-resource.cognitiveservices.azure.com'
-$env:AZURE_SPEECH_AUTH = 'key'
-$env:AZURE_SPEECH_KEY = [System.Net.NetworkCredential]::new('', (Read-Host 'Azure Speech key' -AsSecureString)).Password
+.\stop.ps1
 .\start.ps1
 ```
 
-If the app is already running, stop it first so its replacement inherits the
-updated environment. Keep the key in your local environment, never in source,
-batch metadata, chat, or `.env.example`. The app does not load `.env` files.
+The key belongs only in ignored `.env` or your local shell environment, never in
+source, batch metadata, chat, or `.env.example`. `.env` stays outside Git.
+Azure only changes transcription; class/field suggestions and extraction still
+use AWS Bedrock and need the AWS default profile described above.
 
 Optional Microsoft Entra authentication uses `AZURE_SPEECH_AUTH=entra` instead of
 a key. It requires the optional `requirements-azure.txt` dependencies, a custom
@@ -208,26 +229,36 @@ role at the Speech resource scope. Authentication uses `DefaultAzureCredential`,
 which supports configured application identities or an existing Azure CLI login.
 No interactive login is started by the app.
 
-Select **Azure Speech** under **Transcription engine**, then click **Upload &
-transcribe**. English, Spanish, and French map to `en-US`, `es-ES`, and `fr-FR`;
-auto-detection uses those candidates. Local file-size and duration limits still
-apply. Credentials are checked only when Azure is selected, so the other engines
-do not need Azure setup.
+Create a **new batch**, select **Azure Speech** under **Transcription engine**,
+choose the audio language, and click **Upload & transcribe**. English, Spanish,
+and French map to `en-US`, `es-ES`, and `fr-FR`. Completed transcripts are preserved
+when switching engines, so an existing completed file will not be transcribed again.
+Credentials are checked only when Azure is selected; other engines need no Azure setup.
 
-This path uses the synchronous `2025-10-15` Fast Transcription API. It does not
-create Azure Blob objects or resumable batch jobs. Completed transcripts are
-stored locally. A request interrupted by timeout or app restart cannot be
-reattached; retrying may incur another transcription charge. Requests are not
-automatically retried. Speaker labels remain disabled.
+Azure Fast Transcription does not create Blob objects or resumable batch jobs. Completed transcripts
+are stored locally. A request interrupted by timeout or app restart cannot be
+reattached; retrying can consume more quota/usage. Requests are not automatically
+retried. Speaker labels remain disabled.
 
-See Microsoft's [Fast Transcription guide](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/fast-transcription-create)
+Cloud transcription requests originate from the Python backend, so Azure HTTP calls
+do not appear directly in browser Network tools. **Batch jobs** shows the actual
+provider and response source. New Azure jobs record HTTP 200, the endpoint, API
+version, request time, and Azure's request ID when returned. Expand **Job details
+and actions** to inspect these fields. Credentials and transcript content are not
+copied into job execution metadata. Older jobs show **Not recorded** instead of
+inferring a historical provider from the current dropdown/transcript. The current
+saved transcript provider remains available for reference. Cached/Fresh labels
+describe Bedrock response caching; Azure transcription is not response-cached.
+
+See Microsoft's [Fast Transcription guide](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/fast-transcription-create),
+[quotas](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/speech-services-quotas-and-limits),
 and [Speech permissions](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control)
 for region availability and resource authentication requirements.
 
 ### Optional application settings
 
-Set these before starting. `.env.example` documents non-secret values; the app
-**does not automatically read `.env` files**.
+Set these before starting, either in the ignored root `.env` or as shell variables.
+The app reads `.env` automatically; shell variables take precedence.
 
 ```powershell
 $env:AUDIO_IDP_DATA = '.data'
